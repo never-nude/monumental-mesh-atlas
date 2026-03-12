@@ -1,19 +1,19 @@
 :root {
   --row-height: 132px;
-  --bg-page: #f3f5f8;
-  --bg-panel: #ffffff;
-  --bg-subtle: #f8fafc;
-  --border: #d6dde5;
-  --border-strong: #bcc8d6;
-  --text-main: #16212d;
-  --text-muted: #5c6f82;
-  --text-soft: #7c8c9f;
-  --accent: #1659d8;
-  --accent-soft: #eaf1ff;
+  --bg-page: #ece7dd;
+  --bg-panel: #f8f5ef;
+  --bg-subtle: #f1ece2;
+  --border: #cfc4b2;
+  --border-strong: #b6a691;
+  --text-main: #231c14;
+  --text-muted: #645747;
+  --text-soft: #8b7f6e;
+  --accent: #7f5b33;
+  --accent-soft: #efe5d6;
   --viewer-bg: #11161d;
-  --viewer-bg-soft: #1a2532;
+  --viewer-bg-soft: #1c232d;
   --shadow: 0 12px 32px rgba(16, 26, 38, 0.08);
-  --focus-ring: 0 0 0 2px rgba(22, 89, 216, 0.22);
+  --focus-ring: 0 0 0 2px rgba(127, 91, 51, 0.25);
 }
 
 * {
@@ -27,7 +27,10 @@ body {
   min-height: 100%;
   color: var(--text-main);
   font-family: "Manrope", "Segoe UI", sans-serif;
-  background: linear-gradient(180deg, #f7f8fa 0%, #eef2f6 100%);
+  background:
+    radial-gradient(circle at 12% 12%, rgba(156, 136, 110, 0.16), transparent 38%),
+    radial-gradient(circle at 88% 82%, rgba(103, 88, 64, 0.12), transparent 40%),
+    linear-gradient(180deg, #f2ede4 0%, #e8e0d1 100%);
 }
 
 .shell {
@@ -48,22 +51,38 @@ body {
 }
 
 .topbar {
-  background: var(--bg-panel);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.65), rgba(243, 235, 223, 0.82)),
+    var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 18px 22px;
+  padding: 20px 24px;
   display: flex;
   justify-content: space-between;
   gap: 22px;
   box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.topbar::after {
+  content: "";
+  position: absolute;
+  right: -70px;
+  top: -70px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(127, 91, 51, 0.16), transparent 72%);
+  pointer-events: none;
 }
 
 .kicker {
   margin: 0;
-  color: var(--text-soft);
-  letter-spacing: 0.09em;
+  color: #7f684a;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -73,15 +92,24 @@ body {
   font-size: clamp(30px, 3.3vw, 40px);
   line-height: 1.05;
   letter-spacing: 0.01em;
-  color: #0f1b2b;
+  color: #2a2014;
 }
 
 .lead {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   max-width: 760px;
   color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.lead-subtle {
+  margin: 8px 0 0;
+  color: #6f5f4d;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
 }
 
 .topbar-stats {
@@ -112,7 +140,7 @@ body {
   margin-top: 4px;
   font-size: 19px;
   font-weight: 700;
-  color: #112239;
+  color: #2e2418;
 }
 
 .layout {
@@ -161,7 +189,7 @@ select {
   padding: 9px 10px;
   border-radius: 9px;
   border: 1px solid var(--border-strong);
-  background: #fff;
+  background: #fffcf8;
   color: var(--text-main);
   font: inherit;
   font-size: 14px;
@@ -174,6 +202,12 @@ select[size] {
 
 #workSelect option {
   padding: 5px 6px;
+}
+
+#workSelect optgroup {
+  color: #5b4a35;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .works-batch {
@@ -227,7 +261,7 @@ input[type="range"]:focus-visible {
   position: relative;
   overflow: auto;
   min-height: 0;
-  background: #fcfdff;
+  background: #fbf8f2;
 }
 
 .catalog-spacer {
@@ -253,22 +287,22 @@ input[type="range"]:focus-visible {
   align-items: center;
   padding: 10px;
   border-radius: 11px;
-  border: 1px solid #d8e0e9;
-  background: #ffffff;
+  border: 1px solid #d7ccbb;
+  background: #fffcf8;
   cursor: pointer;
   overflow: hidden;
   transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
 .catalog-card:hover {
-  border-color: #b2c4d9;
-  background: #fdfefe;
+  border-color: #bda78c;
+  background: #fffdf9;
 }
 
 .catalog-card.active {
   border-color: var(--accent);
   background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px rgba(22, 89, 216, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(127, 91, 51, 0.16);
 }
 
 .catalog-card h3 {
@@ -332,15 +366,21 @@ input[type="range"]:focus-visible {
 }
 
 .catalog-card .pill {
-  border: 1px solid #c6d3e3;
-  background: #f4f8fc;
-  color: #546a81;
+  border: 1px solid #d0c2ad;
+  background: #f4ece0;
+  color: #6f5d4a;
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.catalog-card .pill-group {
+  border-color: #b99666;
+  background: #e8dac4;
+  color: #5d4627;
 }
 
 .viewer-panel {

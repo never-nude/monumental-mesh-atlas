@@ -6,7 +6,7 @@
     <title>Monumental Mesh Atlas</title>
     <meta
       name="description"
-      content="A high-scale catalog for STL-style sculpture renderings with node and edge visualization tuned for massive meshes."
+      content="A curated museum-style index of major sculptures from antiquity through the 19th century, with interactive 3D study views."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,11 +20,13 @@
     <div class="shell">
       <header class="topbar">
         <div>
-          <p class="kicker">Sculpture Visualization Platform</p>
-          <h1>Monumental Mesh Atlas</h1>
+          <p class="kicker">The Grand Entrance</p>
+          <h1>Stone and Bronze Museum Index</h1>
           <p class="lead">
-            Professional catalog and viewer for dense node structures and triangle-heavy STL-style sculpture renderings.
+            Enter a curated hall of world sculpture from antiquity through the 19th century. Browse by sculptor, style, origin,
+            and material, then step into each piece with a consistent 3D viewing experience.
           </p>
+          <p class="lead-subtle">Designed as a digital entryway to a timeless collection.</p>
         </div>
         <div class="topbar-stats">
           <div>
@@ -50,6 +52,15 @@
               <option value="all">All collections</option>
               <option value="local">Renderable local meshes</option>
               <option value="historic">Historic 200 index</option>
+            </select>
+
+            <label for="groupBySelect">Group Works By</label>
+            <select id="groupBySelect">
+              <option value="artist">Sculptor</option>
+              <option value="style">Style or period</option>
+              <option value="origin">Origin or source</option>
+              <option value="material">Material signal</option>
+              <option value="none">Flat list</option>
             </select>
 
             <label for="searchInput">Search</label>

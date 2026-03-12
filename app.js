@@ -12,6 +12,7 @@ const dom = {
   statTotalNodes: getById("statTotalNodes"),
   statTotalTriangles: getById("statTotalTriangles"),
   collectionSelect: getById("collectionSelect"),
+  groupBySelect: getById("groupBySelect"),
   searchInput: getById("searchInput"),
   workSelect: getById("workSelect"),
   loadMoreWorksBtn: getById("loadMoreWorksBtn"),
@@ -40,6 +41,7 @@ const state = {
   byId: new Map(),
   activeId: null,
   scope: "all",
+  groupBy: dom.groupBySelect.value,
   search: "",
   style: "all",
   sort: dom.sortSelect.value,
@@ -96,6 +98,11 @@ function bindEvents() {
     state.scope = dom.collectionSelect.value;
     hydrateStyleFilter();
     updateTopStats();
+    applyFilters();
+  });
+
+  dom.groupBySelect.addEventListener("change", () => {
+    state.groupBy = dom.groupBySelect.value;
     applyFilters();
   });
 
@@ -406,7 +413,7 @@ function applyFilters() {
     return text.includes(query);
   });
 
-  sortItems(filtered, state.sort);
+  sortItems(filtered, state.sort, state.groupBy);
   state.filtered = filtered;
 
   if (!state.filtered.find((item) => item.id === state.activeId)) {
@@ -432,24 +439,31 @@ function applyFilters() {
   }
 }
 
-function sortItems(items, sortBy) {
+function sortItems(items, sortBy, groupBy) {
+  items.sort((a, b) => {
+    if (groupBy !== "none") {
+      const groupCompare = getGroupValue(a, groupBy).localeCompare(getGroupValue(b, groupBy));
+      if (groupCompare !== 0) {
+        return groupCompare;
+      }
+    }
+    return compareBySort(a, b, sortBy);
+  });
+}
+
+function compareBySort(a, b, sortBy) {
   switch (sortBy) {
     case "nodes_desc":
-      items.sort((a, b) => Number(b.nodeCount || 0) - Number(a.nodeCount || 0));
-      break;
+      return Number(b.nodeCount || 0) - Number(a.nodeCount || 0);
     case "triangles_desc":
-      items.sort((a, b) => Number(b.triangleCount || 0) - Number(a.triangleCount || 0));
-      break;
+      return Number(b.triangleCount || 0) - Number(a.triangleCount || 0);
     case "popularity_desc":
-      items.sort((a, b) => Number(b.popularityScore || 0) - Number(a.popularityScore || 0));
-      break;
+      return Number(b.popularityScore || 0) - Number(a.popularityScore || 0);
     case "artist_asc":
-      items.sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
-      break;
+      return (a.artist || "").localeCompare(b.artist || "");
     case "title_asc":
     default:
-      items.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-      break;
+      return (a.title || "").localeCompare(b.title || "");
   }
 }
 
@@ -483,6 +497,7 @@ function catalogCardHtml(item) {
   const sourceBadge = item.renderable ? "Renderable" : "Historic index";
   const triangleLabel = item.renderable ? "Triangles" : "Faces";
   const metricLabel = item.renderable ? "Nodes" : "Vertices";
+  const groupingTag = state.groupBy !== "none" ? getGroupValue(item, state.groupBy) : null;
   const media = item.thumbnailUrl
     ? `<img class="catalog-thumb" loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl)}" alt="${escapeHtml(
         `${item.title || "Sculpture"} preview`
@@ -503,6 +518,7 @@ function catalogCardHtml(item) {
     Number(item.triangleCount || 0)
   )}</p>
         <div class="pills">
+          ${groupingTag ? `<span class="pill pill-group">${escapeHtml(groupingTag)}</span>` : ""}
           <span class="pill">${escapeHtml(item.style || "Unsorted")}</span>
           <span class="pill">${escapeHtml(sourceBadge)}</span>
         </div>
@@ -989,31 +1005,104 @@ function getScopedCatalog() {
 }
 
 function populateWorkDropdown() {
-  const scoped = getScopedCatalog()
-    .slice()
-    .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-
-  const options = scoped
-    .map((item) => {
-      const artist = item.artist ? ` — ${item.artist}` : "";
-      return `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || "Untitled")}${escapeHtml(artist)}</option>`;
-    })
-    .join("");
-
-  if (!options) {
+  const items = state.filtered.slice();
+  if (items.length === 0) {
     dom.workSelect.innerHTML = `<option value="">No works available</option>`;
     dom.workSelect.disabled = true;
     dom.workSelect.value = "";
     return;
   }
-
-  dom.workSelect.innerHTML = options;
+  const html = buildGroupedWorkOptions(items, state.groupBy);
+  dom.workSelect.innerHTML = html;
   dom.workSelect.disabled = false;
-  if (state.activeId && scoped.some((item) => item.id === state.activeId)) {
+  if (state.activeId && items.some((item) => item.id === state.activeId)) {
     dom.workSelect.value = state.activeId;
   } else {
     dom.workSelect.selectedIndex = -1;
   }
+}
+
+function buildGroupedWorkOptions(items, groupBy) {
+  if (groupBy === "none") {
+    return items
+      .map((item) => {
+        const artist = item.artist ? ` — ${item.artist}` : "";
+        return `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || "Untitled")}${escapeHtml(artist)}</option>`;
+      })
+      .join("");
+  }
+
+  const grouped = new Map();
+  for (const item of items) {
+    const group = getGroupValue(item, groupBy);
+    if (!grouped.has(group)) {
+      grouped.set(group, []);
+    }
+    grouped.get(group).push(item);
+  }
+
+  return Array.from(grouped.entries())
+    .map(([group, groupItems]) => {
+      const options = groupItems
+        .map((item) => {
+          const artist = item.artist ? ` — ${item.artist}` : "";
+          return `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || "Untitled")}${escapeHtml(artist)}</option>`;
+        })
+        .join("");
+      return `<optgroup label="${escapeHtml(getGroupLabel(groupBy))}: ${escapeHtml(group)}">${options}</optgroup>`;
+    })
+    .join("");
+}
+
+function getGroupLabel(groupBy) {
+  switch (groupBy) {
+    case "artist":
+      return "Sculptor";
+    case "style":
+      return "Style";
+    case "origin":
+      return "Origin";
+    case "material":
+      return "Material";
+    default:
+      return "Group";
+  }
+}
+
+function getGroupValue(item, groupBy) {
+  switch (groupBy) {
+    case "artist":
+      return item.artist || "Unknown sculptor";
+    case "style":
+      return item.style || "Unknown style";
+    case "origin":
+      return item.origin || "Unknown origin";
+    case "material":
+      return inferMaterialGroup(item);
+    case "none":
+    default:
+      return "All works";
+  }
+}
+
+function inferMaterialGroup(item) {
+  const text = [item.title, item.description, ...(item.tags || [])].join(" ").toLowerCase();
+  if (text.includes("marble")) {
+    return "Marble";
+  }
+  if (text.includes("granite")) {
+    return "Granite";
+  }
+  if (text.includes("stone") || text.includes("limestone") || text.includes("sandstone")) {
+    return "Stone";
+  }
+  if (text.includes("bronze")) {
+    return "Bronze";
+  }
+  if (text.includes("metal") || text.includes("cast")) {
+    return "Cast metal";
+  }
+  return "Material unconfirmed";
 }
 
 function isRenderableItem(item) {
