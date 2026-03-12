@@ -925,23 +925,30 @@ function getScopedCatalog() {
 }
 
 function populateWorkDropdown() {
-  const options = state.filtered
+  const scoped = getScopedCatalog()
+    .slice()
+    .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+  const options = scoped
     .map((item) => {
       const artist = item.artist ? ` — ${item.artist}` : "";
       return `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || "Untitled")}${escapeHtml(artist)}</option>`;
     })
     .join("");
 
-  const label = state.filtered.length
-    ? `Jump to work (${NUMBER.format(state.filtered.length)})`
-    : "No matching works";
+  if (!options) {
+    dom.workSelect.innerHTML = `<option value="">No works available</option>`;
+    dom.workSelect.disabled = true;
+    dom.workSelect.value = "";
+    return;
+  }
 
-  dom.workSelect.innerHTML = `<option value="">${escapeHtml(label)}</option>${options}`;
-  dom.workSelect.disabled = state.filtered.length === 0;
-  if (state.activeId && state.filtered.some((item) => item.id === state.activeId)) {
+  dom.workSelect.innerHTML = options;
+  dom.workSelect.disabled = false;
+  if (state.activeId && scoped.some((item) => item.id === state.activeId)) {
     dom.workSelect.value = state.activeId;
   } else {
-    dom.workSelect.value = "";
+    dom.workSelect.selectedIndex = -1;
   }
 }
 

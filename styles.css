@@ -167,6 +167,15 @@ select {
   font-size: 14px;
 }
 
+select[size] {
+  min-height: 270px;
+  padding: 6px;
+}
+
+#workSelect option {
+  padding: 5px 6px;
+}
+
 input[type="search"]::placeholder {
   color: #8b9aad;
 }
