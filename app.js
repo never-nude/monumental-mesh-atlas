@@ -71,10 +71,6 @@ async function boot() {
   updateTopStats();
   hydrateStyleFilter();
   applyFilters();
-
-  if (state.filtered.length > 0) {
-    await selectItem(state.filtered[0].id);
-  }
 }
 
 function bindEvents() {
@@ -85,10 +81,13 @@ function bindEvents() {
     applyFilters();
   });
 
-  dom.searchInput.addEventListener("input", () => {
+  const onSearchChange = () => {
     state.search = dom.searchInput.value.trim().toLowerCase();
     applyFilters();
-  });
+  };
+  dom.searchInput.addEventListener("input", onSearchChange);
+  dom.searchInput.addEventListener("search", onSearchChange);
+  dom.searchInput.addEventListener("change", onSearchChange);
 
   dom.styleFilter.addEventListener("change", () => {
     state.style = dom.styleFilter.value;
@@ -283,6 +282,7 @@ function hydrateStyleFilter() {
 function applyFilters() {
   const query = state.search;
   const scoped = getScopedCatalog();
+  const previousActiveId = state.activeId;
 
   const filtered = scoped.filter((item) => {
     if (state.style !== "all" && String(item.style || "") !== state.style) {
@@ -299,6 +299,10 @@ function applyFilters() {
       item.style,
       item.origin,
       item.year,
+      item.creator,
+      item.license,
+      ...(item.archiveTypes || []),
+      ...(item.matchedQueries || []),
       ...(item.tags || [])
     ]
       .join(" ")
@@ -319,6 +323,17 @@ function applyFilters() {
   }`;
 
   renderCatalogWindow(true);
+
+  if (state.activeId && state.activeId !== previousActiveId) {
+    void selectItem(state.activeId, { resetScroll: false });
+    return;
+  }
+
+  if (!state.activeId) {
+    setViewerControlsEnabled(false);
+    viewer.showEmptyState();
+    renderDetails(null, null);
+  }
 }
 
 function sortItems(items, sortBy) {
@@ -614,6 +629,11 @@ class AtlasViewer {
     const palette = item.palette || {};
     this.scene.background = new THREE.Color(palette.background || "#0f1a24");
     this.setMessage("Metadata entry only. Open the source model from details.");
+  }
+
+  showEmptyState() {
+    this.disposeLayers();
+    this.setMessage("No matching sculptures. Adjust search or filters.");
   }
 
   applyModel(item, model) {
