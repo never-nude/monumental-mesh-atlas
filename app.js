@@ -1,5 +1,5 @@
-import * as THREE from "./vendor/three/build/three.module.js";
-import { OrbitControls } from "./vendor/three/examples/jsm/controls/OrbitControls.js";
+import * as THREE from "./vendor/three/build/three.module.js?v=20260312a";
+import { OrbitControls } from "./vendor/three/examples/jsm/controls/OrbitControls.js?v=20260312a";
 
 const CATALOG_URL = "./data/catalog.json";
 const HISTORIC_CATALOG_URL = "./data/popular-sculptures-renaissance-19c.json";
