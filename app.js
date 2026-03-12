@@ -89,6 +89,18 @@ function bindEvents() {
   dom.searchInput.addEventListener("input", onSearchChange);
   dom.searchInput.addEventListener("search", onSearchChange);
   dom.searchInput.addEventListener("change", onSearchChange);
+  dom.searchInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    onSearchChange();
+
+    if (state.filtered.length > 0) {
+      void selectItem(state.filtered[0].id, { resetScroll: false });
+    }
+  });
 
   dom.workSelect.addEventListener("change", () => {
     const selectedId = dom.workSelect.value;
