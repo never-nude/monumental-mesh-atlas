@@ -1,9 +1,9 @@
-import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
-import { OrbitControls } from "https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js";
+import * as THREE from "./vendor/three/build/three.module.js";
+import { OrbitControls } from "./vendor/three/examples/jsm/controls/OrbitControls.js";
 
 const CATALOG_URL = "./data/catalog.json";
 const HISTORIC_CATALOG_URL = "./data/popular-sculptures-renaissance-19c.json";
-const ROW_HEIGHT = 126;
+const ROW_HEIGHT = 132;
 const OVERSCAN = 6;
 const NUMBER = new Intl.NumberFormat("en-US");
 
@@ -14,6 +14,8 @@ const dom = {
   collectionSelect: getById("collectionSelect"),
   searchInput: getById("searchInput"),
   workSelect: getById("workSelect"),
+  loadMoreWorksBtn: getById("loadMoreWorksBtn"),
+  workBatchStatus: getById("workBatchStatus"),
   styleFilter: getById("styleFilter"),
   sortSelect: getById("sortSelect"),
   resultsCount: getById("resultsCount"),
@@ -48,7 +50,11 @@ const state = {
     surface: dom.toggleSurface.checked,
     autoRotate: dom.toggleRotate.checked
   },
-  nodeSize: Number(dom.nodeSize.value)
+  nodeSize: Number(dom.nodeSize.value),
+  batchSize: 4,
+  localTotal: 0,
+  historicTotal: 0,
+  historicQueue: []
 };
 
 const viewer = new AtlasViewer({
@@ -65,9 +71,20 @@ boot().catch((error) => {
 async function boot() {
   await viewer.init();
   const manifest = await loadCatalogs();
-  state.catalog = manifest.items;
+  state.localTotal = manifest.localItems.length;
+  state.historicTotal = manifest.historicItems.length;
+
+  const initialHistoric = manifest.historicItems.slice(0, state.batchSize);
+  state.historicQueue = manifest.historicItems.slice(state.batchSize);
+
+  state.catalog = [...manifest.localItems, ...initialHistoric];
   state.byId = new Map(state.catalog.map((item) => [item.id, item]));
-  hydrateCollectionFilter(manifest.collectionCounts);
+  hydrateCollectionFilter({
+    local: state.localTotal,
+    historicLoaded: initialHistoric.length,
+    historicTotal: state.historicTotal
+  });
+  updateWorkBatchStatus();
 
   updateTopStats();
   hydrateStyleFilter();
@@ -108,6 +125,10 @@ function bindEvents() {
       return;
     }
     void selectItem(selectedId, { resetScroll: false });
+  });
+
+  dom.loadMoreWorksBtn.addEventListener("click", () => {
+    loadMoreHistoricBatch();
   });
 
   dom.styleFilter.addEventListener("change", () => {
@@ -178,11 +199,8 @@ async function loadCatalogs() {
   const historicItems = (historicManifest.items || []).map((item) => normalizeHistoricItem(item));
 
   return {
-    items: [...localItems, ...historicItems],
-    collectionCounts: {
-      local: localItems.length,
-      historic: historicItems.length
-    }
+    localItems,
+    historicItems
   };
 }
 
@@ -269,14 +287,60 @@ function inferCenturyLabel(period) {
 
 function hydrateCollectionFilter(counts) {
   const localCount = counts.local || 0;
-  const historicCount = counts.historic || 0;
-  const allCount = localCount + historicCount;
+  const historicLoaded = counts.historicLoaded || 0;
+  const historicTotal = counts.historicTotal || historicLoaded;
+  const allCount = localCount + historicLoaded;
+  const historicLabel =
+    historicTotal > historicLoaded
+      ? `Historic index (${NUMBER.format(historicLoaded)} / ${NUMBER.format(historicTotal)} loaded)`
+      : `Historic index (${NUMBER.format(historicLoaded)})`;
+
   dom.collectionSelect.innerHTML = `
     <option value="all">All collections (${NUMBER.format(allCount)})</option>
     <option value="local">Renderable local meshes (${NUMBER.format(localCount)})</option>
-    <option value="historic">Historic 200 index (${NUMBER.format(historicCount)})</option>
+    <option value="historic">${historicLabel}</option>
   `;
   dom.collectionSelect.value = state.scope;
+}
+
+function updateWorkBatchStatus() {
+  const loaded = getHistoricLoadedCount();
+  const remaining = state.historicQueue.length;
+  if (state.historicTotal <= 0) {
+    dom.workBatchStatus.textContent = "Historic works unavailable";
+    dom.loadMoreWorksBtn.disabled = true;
+    return;
+  }
+
+  dom.workBatchStatus.textContent = `Loaded ${NUMBER.format(loaded)} of ${NUMBER.format(state.historicTotal)} historic works`;
+  dom.loadMoreWorksBtn.disabled = remaining === 0;
+}
+
+function getHistoricLoadedCount() {
+  return state.catalog.reduce((sum, item) => sum + (item.catalogType === "historic" ? 1 : 0), 0);
+}
+
+function loadMoreHistoricBatch() {
+  if (state.historicQueue.length === 0) {
+    updateWorkBatchStatus();
+    return;
+  }
+
+  const nextBatch = state.historicQueue.splice(0, state.batchSize);
+  for (const item of nextBatch) {
+    state.catalog.push(item);
+    state.byId.set(item.id, item);
+  }
+
+  hydrateCollectionFilter({
+    local: state.localTotal,
+    historicLoaded: getHistoricLoadedCount(),
+    historicTotal: state.historicTotal
+  });
+  updateWorkBatchStatus();
+  hydrateStyleFilter();
+  updateTopStats();
+  applyFilters();
 }
 
 function updateTopStats() {

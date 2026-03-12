@@ -176,6 +176,23 @@ select[size] {
   padding: 5px 6px;
 }
 
+.works-batch {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.works-batch .results {
+  margin: 0;
+  font-size: 11px;
+}
+
+#loadMoreWorksBtn {
+  white-space: nowrap;
+}
+
 input[type="search"]::placeholder {
   color: #8b9aad;
 }
