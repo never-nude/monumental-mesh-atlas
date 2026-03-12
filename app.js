@@ -1,0 +1,709 @@
+import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
+import { OrbitControls } from "https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js";
+
+const CATALOG_URL = "./data/catalog.json";
+const ROW_HEIGHT = 126;
+const OVERSCAN = 6;
+const NUMBER = new Intl.NumberFormat("en-US");
+
+const dom = {
+  statTotalWorks: getById("statTotalWorks"),
+  statTotalNodes: getById("statTotalNodes"),
+  statTotalTriangles: getById("statTotalTriangles"),
+  searchInput: getById("searchInput"),
+  styleFilter: getById("styleFilter"),
+  sortSelect: getById("sortSelect"),
+  resultsCount: getById("resultsCount"),
+  catalogScroll: getById("catalogScroll"),
+  catalogSpacer: getById("catalogSpacer"),
+  catalogItems: getById("catalogItems"),
+  viewerCanvas: getById("viewerCanvas"),
+  viewerMessage: getById("viewerMessage"),
+  qualitySelect: getById("qualitySelect"),
+  nodeSize: getById("nodeSize"),
+  toggleNodes: getById("toggleNodes"),
+  toggleEdges: getById("toggleEdges"),
+  toggleSurface: getById("toggleSurface"),
+  toggleRotate: getById("toggleRotate"),
+  recenterBtn: getById("recenterBtn"),
+  detailsPanel: getById("detailsPanel")
+};
+
+const state = {
+  catalog: [],
+  filtered: [],
+  byId: new Map(),
+  activeId: null,
+  search: "",
+  style: "all",
+  sort: dom.sortSelect.value,
+  quality: dom.qualitySelect.value,
+  layers: {
+    nodes: dom.toggleNodes.checked,
+    edges: dom.toggleEdges.checked,
+    surface: dom.toggleSurface.checked,
+    autoRotate: dom.toggleRotate.checked
+  },
+  nodeSize: Number(dom.nodeSize.value)
+};
+
+const viewer = new AtlasViewer({
+  canvas: dom.viewerCanvas,
+  messageEl: dom.viewerMessage
+});
+
+bindEvents();
+
+boot().catch((error) => {
+  viewer.setMessage(`Failed to initialize catalog: ${error.message}`, true);
+});
+
+async function boot() {
+  await viewer.init();
+  const manifest = await loadCatalog();
+
+  state.catalog = manifest.items || [];
+  state.byId = new Map(state.catalog.map((item) => [item.id, item]));
+
+  updateTopStats();
+  hydrateStyleFilter();
+  applyFilters();
+
+  if (state.filtered.length > 0) {
+    await selectItem(state.filtered[0].id);
+  }
+}
+
+function bindEvents() {
+  dom.searchInput.addEventListener("input", () => {
+    state.search = dom.searchInput.value.trim().toLowerCase();
+    applyFilters();
+  });
+
+  dom.styleFilter.addEventListener("change", () => {
+    state.style = dom.styleFilter.value;
+    applyFilters();
+  });
+
+  dom.sortSelect.addEventListener("change", () => {
+    state.sort = dom.sortSelect.value;
+    applyFilters();
+  });
+
+  dom.catalogScroll.addEventListener("scroll", renderCatalogWindow);
+  window.addEventListener("resize", renderCatalogWindow);
+
+  dom.catalogItems.addEventListener("click", (event) => {
+    const card = event.target.closest(".catalog-card[data-model-id]");
+    if (!card) {
+      return;
+    }
+    void selectItem(card.dataset.modelId);
+  });
+
+  dom.qualitySelect.addEventListener("change", () => {
+    state.quality = dom.qualitySelect.value;
+    if (state.activeId) {
+      void selectItem(state.activeId);
+    }
+  });
+
+  dom.nodeSize.addEventListener("input", () => {
+    state.nodeSize = Number(dom.nodeSize.value);
+    viewer.setNodeSize(state.nodeSize);
+  });
+
+  dom.toggleNodes.addEventListener("change", () => {
+    state.layers.nodes = dom.toggleNodes.checked;
+    viewer.setLayerVisibility(state.layers);
+  });
+
+  dom.toggleEdges.addEventListener("change", () => {
+    state.layers.edges = dom.toggleEdges.checked;
+    viewer.setLayerVisibility(state.layers);
+  });
+
+  dom.toggleSurface.addEventListener("change", () => {
+    state.layers.surface = dom.toggleSurface.checked;
+    viewer.setLayerVisibility(state.layers);
+  });
+
+  dom.toggleRotate.addEventListener("change", () => {
+    state.layers.autoRotate = dom.toggleRotate.checked;
+    viewer.setAutoRotate(state.layers.autoRotate);
+  });
+
+  dom.recenterBtn.addEventListener("click", () => {
+    viewer.recenter();
+  });
+}
+
+async function loadCatalog() {
+  const response = await fetch(CATALOG_URL);
+  if (!response.ok) {
+    throw new Error(`Could not load ${CATALOG_URL} (${response.status})`);
+  }
+
+  return response.json();
+}
+
+function updateTopStats() {
+  const totalNodes = state.catalog.reduce((sum, item) => sum + Number(item.nodeCount || 0), 0);
+  const totalTriangles = state.catalog.reduce((sum, item) => sum + Number(item.triangleCount || 0), 0);
+
+  dom.statTotalWorks.textContent = NUMBER.format(state.catalog.length);
+  dom.statTotalNodes.textContent = NUMBER.format(totalNodes);
+  dom.statTotalTriangles.textContent = NUMBER.format(totalTriangles);
+}
+
+function hydrateStyleFilter() {
+  const uniqueStyles = new Set();
+  for (const item of state.catalog) {
+    if (item.style) {
+      uniqueStyles.add(item.style);
+    }
+  }
+
+  const sorted = [...uniqueStyles].sort((a, b) => a.localeCompare(b));
+  const options = sorted
+    .map((style) => `<option value="${escapeHtml(style)}">${escapeHtml(style)}</option>`)
+    .join("");
+
+  dom.styleFilter.innerHTML = `<option value="all">All styles</option>${options}`;
+}
+
+function applyFilters() {
+  const query = state.search;
+
+  const filtered = state.catalog.filter((item) => {
+    if (state.style !== "all" && item.style !== state.style) {
+      return false;
+    }
+
+    if (!query) {
+      return true;
+    }
+
+    const text = [
+      item.title,
+      item.artist,
+      item.style,
+      item.origin,
+      item.year,
+      ...(item.tags || [])
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return text.includes(query);
+  });
+
+  sortItems(filtered, state.sort);
+  state.filtered = filtered;
+
+  if (!state.filtered.find((item) => item.id === state.activeId)) {
+    state.activeId = state.filtered[0]?.id || null;
+  }
+
+  dom.resultsCount.textContent = `${NUMBER.format(state.filtered.length)} result${
+    state.filtered.length === 1 ? "" : "s"
+  }`;
+
+  renderCatalogWindow(true);
+}
+
+function sortItems(items, sortBy) {
+  switch (sortBy) {
+    case "nodes_desc":
+      items.sort((a, b) => Number(b.nodeCount || 0) - Number(a.nodeCount || 0));
+      break;
+    case "triangles_desc":
+      items.sort((a, b) => Number(b.triangleCount || 0) - Number(a.triangleCount || 0));
+      break;
+    case "artist_asc":
+      items.sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
+      break;
+    case "title_asc":
+    default:
+      items.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+      break;
+  }
+}
+
+function renderCatalogWindow(resetScroll = false) {
+  if (resetScroll) {
+    dom.catalogScroll.scrollTop = 0;
+  }
+
+  const total = state.filtered.length;
+  const totalHeight = total * ROW_HEIGHT + 20;
+  dom.catalogSpacer.style.height = `${totalHeight}px`;
+
+  if (total === 0) {
+    dom.catalogItems.style.transform = "translateY(0px)";
+    dom.catalogItems.innerHTML = `<div class="card-empty">No entries matched your filter.</div>`;
+    return;
+  }
+
+  const scrollTop = dom.catalogScroll.scrollTop;
+  const viewportHeight = dom.catalogScroll.clientHeight;
+  const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+  const end = Math.min(total, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN);
+
+  const windowItems = state.filtered.slice(start, end);
+  dom.catalogItems.style.transform = `translateY(${start * ROW_HEIGHT}px)`;
+  dom.catalogItems.innerHTML = windowItems.map((item) => catalogCardHtml(item)).join("");
+}
+
+function catalogCardHtml(item) {
+  const activeClass = item.id === state.activeId ? "active" : "";
+
+  return `
+    <article class="catalog-card ${activeClass}" data-model-id="${escapeHtml(item.id)}" style="--accent:${
+      item.palette?.edge || "#9bc9c6"
+    }">
+      <h3>${escapeHtml(item.title || "Untitled")}</h3>
+      <p class="meta">${escapeHtml(item.artist || "Unknown artist")} ${item.year ? "• " + escapeHtml(item.year) : ""}</p>
+      <p class="meta">Nodes ${NUMBER.format(Number(item.nodeCount || 0))} • Triangles ${NUMBER.format(Number(item.triangleCount || 0))}</p>
+      <div class="pills">
+        <span class="pill">${escapeHtml(item.style || "Unsorted")}</span>
+      </div>
+    </article>
+  `;
+}
+
+async function selectItem(id, options = {}) {
+  if (!id) {
+    return;
+  }
+
+  const item = state.byId.get(id);
+  if (!item) {
+    return;
+  }
+
+  state.activeId = id;
+  renderCatalogWindow(Boolean(options.resetScroll));
+  renderDetails(item, null);
+
+  try {
+    const stats = await viewer.load(item, state.quality);
+
+    if (state.activeId !== item.id) {
+      return;
+    }
+
+    viewer.setLayerVisibility(state.layers);
+    viewer.setNodeSize(state.nodeSize);
+    viewer.setAutoRotate(state.layers.autoRotate);
+    renderDetails(item, stats);
+  } catch (error) {
+    if (String(error.message).includes("superseded")) {
+      return;
+    }
+    viewer.setMessage(`Failed to render ${item.title}: ${error.message}`, true);
+  }
+}
+
+function renderDetails(item, renderStats) {
+  if (!item) {
+    dom.detailsPanel.innerHTML = '<p class="details-empty">No sculpture selected.</p>';
+    return;
+  }
+
+  const sourceTriangles = Number(item.sourceTriangleCount || item.triangleCount || 0);
+  const renderedTriangles = Number(renderStats?.renderedTriangles || item.triangleCount || 0);
+  const renderedNodes = Number(renderStats?.renderedNodes || item.nodeCount || 0);
+  const renderedEdges = Number(renderStats?.renderedEdgeSegments || item.edgeCount || 0);
+  const profile = renderStats?.profileName || (state.quality === "auto" ? "auto" : state.quality);
+
+  dom.detailsPanel.innerHTML = `
+    <h2>${escapeHtml(item.title)}</h2>
+    <p>${escapeHtml(item.artist || "Unknown artist")} ${item.year ? `(${escapeHtml(item.year)})` : ""}</p>
+    <p>${escapeHtml(item.description || "No description available.")}</p>
+    <div class="stats-grid">
+      <div><span>Rendered Triangles</span><strong>${NUMBER.format(renderedTriangles)}</strong></div>
+      <div><span>Source Triangles</span><strong>${NUMBER.format(sourceTriangles)}</strong></div>
+      <div><span>Rendered Nodes</span><strong>${NUMBER.format(renderedNodes)}</strong></div>
+      <div><span>Edge Segments</span><strong>${NUMBER.format(renderedEdges)}</strong></div>
+      <div><span>Profile</span><strong>${escapeHtml(profile)}</strong></div>
+      <div><span>Style</span><strong>${escapeHtml(item.style || "Unknown")}</strong></div>
+      <div><span>Origin</span><strong>${escapeHtml(item.origin || "Unknown")}</strong></div>
+      <div><span>Tags</span><strong>${escapeHtml((item.tags || []).slice(0, 2).join(" / ") || "none")}</strong></div>
+    </div>
+  `;
+}
+
+class AtlasViewer {
+  constructor({ canvas, messageEl }) {
+    this.canvas = canvas;
+    this.messageEl = messageEl;
+    this.renderer = null;
+    this.scene = null;
+    this.camera = null;
+    this.controls = null;
+    this.root = null;
+
+    this.layers = {
+      surface: null,
+      edges: null,
+      nodes: null
+    };
+
+    this.nodeBaseSize = 0.012;
+    this.lastFit = null;
+    this.requestCounter = 0;
+    this.latestRequestId = 0;
+    this.pendingRequests = new Map();
+
+    this.worker = new Worker(new URL("./model-worker.js", import.meta.url), { type: "module" });
+    this.worker.onmessage = (event) => this.onWorkerMessage(event);
+
+    this.animate = this.animate.bind(this);
+    this.resize = this.resize.bind(this);
+  }
+
+  async init() {
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: this.canvas,
+      antialias: true,
+      alpha: false,
+      powerPreference: "high-performance"
+    });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight, false);
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x0b1315);
+
+    const width = this.canvas.clientWidth || 2;
+    const height = this.canvas.clientHeight || 2;
+    this.camera = new THREE.PerspectiveCamera(46, width / height, 0.01, 2000);
+    this.camera.position.set(0, 0.35, 2.4);
+
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.enablePan = true;
+    this.controls.autoRotate = true;
+    this.controls.autoRotateSpeed = 0.65;
+
+    this.root = new THREE.Group();
+    this.scene.add(this.root);
+
+    const hemi = new THREE.HemisphereLight(0xe8f4ff, 0x1f2b2f, 0.74);
+    this.scene.add(hemi);
+
+    const key = new THREE.DirectionalLight(0xfff4dc, 1.15);
+    key.position.set(2.7, 2.2, 1.8);
+    this.scene.add(key);
+
+    const rim = new THREE.DirectionalLight(0x88d1d7, 0.58);
+    rim.position.set(-2.5, 1.3, -2.8);
+    this.scene.add(rim);
+
+    this.floor = new THREE.Mesh(
+      new THREE.CircleGeometry(2.2, 80),
+      new THREE.MeshBasicMaterial({ color: 0x0b1819, transparent: true, opacity: 0.62 })
+    );
+    this.floor.rotation.x = -Math.PI * 0.5;
+    this.floor.position.y = -0.9;
+    this.scene.add(this.floor);
+
+    this.resizeObserver = new ResizeObserver(this.resize);
+    this.resizeObserver.observe(this.canvas.parentElement);
+
+    window.addEventListener("resize", this.resize);
+    this.animate();
+  }
+
+  onWorkerMessage(event) {
+    const payload = event.data || {};
+    const pending = this.pendingRequests.get(payload.requestId);
+    if (!pending) {
+      return;
+    }
+
+    this.pendingRequests.delete(payload.requestId);
+
+    if (!payload.ok) {
+      pending.reject(new Error(payload.error || "Worker failed to process geometry."));
+      return;
+    }
+
+    pending.resolve(payload.model);
+  }
+
+  async load(item, qualityName) {
+    this.setMessage(`Loading ${item.title}...`);
+
+    const requestId = ++this.requestCounter;
+    this.latestRequestId = requestId;
+
+    const resultPromise = new Promise((resolve, reject) => {
+      this.pendingRequests.set(requestId, { resolve, reject });
+    });
+
+    this.worker.postMessage({
+      requestId,
+      item,
+      profileName: qualityName
+    });
+
+    const model = await resultPromise;
+
+    if (requestId !== this.latestRequestId) {
+      throw new Error("superseded");
+    }
+
+    this.applyModel(item, model);
+    this.setMessage(
+      `Profile ${model.profileName}: ${NUMBER.format(model.stats.renderedTriangles)} triangles, ${NUMBER.format(
+        model.stats.renderedNodes
+      )} nodes.`
+    );
+
+    return {
+      ...model.stats,
+      profileName: model.profileName
+    };
+  }
+
+  applyModel(item, model) {
+    this.disposeLayers();
+
+    const palette = item.palette || {};
+    this.scene.background = new THREE.Color(palette.background || "#0b1315");
+
+    if (model.surface && model.surface.positions.length > 0 && model.surface.indices.length > 0) {
+      const surfaceGeometry = new THREE.BufferGeometry();
+      surfaceGeometry.setAttribute("position", new THREE.BufferAttribute(model.surface.positions, 3));
+      surfaceGeometry.setIndex(new THREE.BufferAttribute(model.surface.indices, 1));
+
+      const renderedTriangles = Math.floor(model.surface.indices.length / 3);
+      let surfaceMaterial;
+
+      if (renderedTriangles > 550_000) {
+        surfaceMaterial = new THREE.MeshBasicMaterial({
+          color: palette.surface || "#d8ceb6",
+          transparent: true,
+          opacity: 0.7,
+          side: THREE.DoubleSide
+        });
+      } else {
+        surfaceGeometry.computeVertexNormals();
+        surfaceMaterial = new THREE.MeshStandardMaterial({
+          color: palette.surface || "#d8ceb6",
+          roughness: 0.75,
+          metalness: 0.05,
+          transparent: true,
+          opacity: 0.86,
+          flatShading: renderedTriangles > 300_000,
+          side: THREE.DoubleSide
+        });
+      }
+
+      this.layers.surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
+      this.root.add(this.layers.surface);
+    }
+
+    if (model.edges && model.edges.positions.length > 0) {
+      const edgeGeometry = new THREE.BufferGeometry();
+      edgeGeometry.setAttribute("position", new THREE.BufferAttribute(model.edges.positions, 3));
+      const edgeMaterial = new THREE.LineBasicMaterial({
+        color: palette.edge || "#7dc4c1",
+        transparent: true,
+        opacity: 0.42
+      });
+      this.layers.edges = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+      this.root.add(this.layers.edges);
+    }
+
+    if (model.nodes && model.nodes.positions.length > 0) {
+      const nodeGeometry = new THREE.BufferGeometry();
+      nodeGeometry.setAttribute("position", new THREE.BufferAttribute(model.nodes.positions, 3));
+
+      this.nodeBaseSize = this.deriveNodeSize(model.stats.renderedNodes);
+
+      const nodeMaterial = new THREE.PointsMaterial({
+        color: palette.node || "#f0b88b",
+        size: this.nodeBaseSize,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.9
+      });
+      this.layers.nodes = new THREE.Points(nodeGeometry, nodeMaterial);
+      this.root.add(this.layers.nodes);
+    }
+
+    this.fitToCurrentModel();
+  }
+
+  deriveNodeSize(renderedNodes) {
+    if (renderedNodes > 700_000) {
+      return 0.004;
+    }
+    if (renderedNodes > 350_000) {
+      return 0.006;
+    }
+    if (renderedNodes > 100_000) {
+      return 0.009;
+    }
+    return 0.012;
+  }
+
+  fitToCurrentModel() {
+    const bounds = new THREE.Box3();
+    let hasBounds = false;
+
+    for (const key of ["surface", "edges", "nodes"]) {
+      const layer = this.layers[key];
+      if (!layer) {
+        continue;
+      }
+      bounds.expandByObject(layer);
+      hasBounds = true;
+    }
+
+    if (!hasBounds) {
+      return;
+    }
+
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+
+    const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+    const distance = maxDim * 1.75;
+
+    this.camera.position.set(center.x + distance * 0.35, center.y + distance * 0.22, center.z + distance);
+    this.camera.near = Math.max(maxDim / 1200, 0.001);
+    this.camera.far = Math.max(maxDim * 120, 200);
+    this.camera.updateProjectionMatrix();
+
+    this.controls.target.copy(center);
+    this.controls.update();
+
+    this.lastFit = {
+      center,
+      distance
+    };
+
+    this.floor.position.set(center.x, center.y - maxDim * 0.62, center.z);
+    this.floor.scale.setScalar(Math.max(maxDim * 1.2, 1));
+  }
+
+  setLayerVisibility(config) {
+    if (this.layers.surface) {
+      this.layers.surface.visible = Boolean(config.surface);
+    }
+    if (this.layers.edges) {
+      this.layers.edges.visible = Boolean(config.edges);
+    }
+    if (this.layers.nodes) {
+      this.layers.nodes.visible = Boolean(config.nodes);
+    }
+  }
+
+  setNodeSize(multiplier) {
+    if (!this.layers.nodes) {
+      return;
+    }
+
+    const mat = this.layers.nodes.material;
+    mat.size = this.nodeBaseSize * Math.max(0.1, multiplier);
+    mat.needsUpdate = true;
+  }
+
+  setAutoRotate(enabled) {
+    this.controls.autoRotate = Boolean(enabled);
+  }
+
+  recenter() {
+    if (!this.lastFit) {
+      return;
+    }
+
+    const { center, distance } = this.lastFit;
+    this.camera.position.set(center.x + distance * 0.35, center.y + distance * 0.22, center.z + distance);
+    this.controls.target.copy(center);
+    this.controls.update();
+  }
+
+  disposeLayers() {
+    for (const key of Object.keys(this.layers)) {
+      const layer = this.layers[key];
+      if (!layer) {
+        continue;
+      }
+
+      if (layer.geometry) {
+        layer.geometry.dispose();
+      }
+      if (layer.material) {
+        if (Array.isArray(layer.material)) {
+          for (const material of layer.material) {
+            material.dispose();
+          }
+        } else {
+          layer.material.dispose();
+        }
+      }
+
+      this.root.remove(layer);
+      this.layers[key] = null;
+    }
+  }
+
+  setMessage(text, isError = false) {
+    this.messageEl.textContent = text;
+    this.messageEl.style.borderColor = isError ? "rgba(244, 127, 111, 0.7)" : "rgba(144, 179, 172, 0.33)";
+    this.messageEl.style.color = isError ? "#ffd6d0" : "#c3d8d3";
+  }
+
+  resize() {
+    if (!this.renderer || !this.camera) {
+      return;
+    }
+
+    const parent = this.canvas.parentElement;
+    const width = parent.clientWidth;
+    const height = parent.clientHeight;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+
+    this.renderer.setSize(width, height, false);
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+  }
+
+  animate() {
+    requestAnimationFrame(this.animate);
+
+    if (!this.renderer || !this.scene || !this.camera || !this.controls) {
+      return;
+    }
+
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+  }
+}
+
+function getById(id) {
+  const element = document.getElementById(id);
+  if (!element) {
+    throw new Error(`Missing expected DOM node: #${id}`);
+  }
+  return element;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}

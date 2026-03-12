@@ -1,0 +1,85 @@
+{
+  "name": "Monumental Mesh Atlas",
+  "version": 1,
+  "generatedAt": "2026-03-11",
+  "items": [
+    {
+      "id": "david-study",
+      "title": "David Study",
+      "artist": "Michelangelo",
+      "year": "1501-1504",
+      "origin": "Florence",
+      "style": "Renaissance",
+      "description": "High-density study mesh from Michelangelo's David, configured for triangle-forward rendering with node overlays.",
+      "tags": [
+        "marble",
+        "heroic nude",
+        "stl-style"
+      ],
+      "dataUrl": "./data/models/david_study_mesh.json",
+      "format": "tri_mesh",
+      "nodeCount": 68234,
+      "triangleCount": 28000,
+      "edgeCount": 84000,
+      "sourceTriangleCount": 1199948,
+      "palette": {
+        "background": "#0a1417",
+        "surface": "#d7ccb8",
+        "edge": "#84c6c0",
+        "node": "#efb57f"
+      }
+    },
+    {
+      "id": "cupid-bouchardon",
+      "title": "Cupid Cutting His Bow",
+      "artist": "Edme Bouchardon",
+      "year": "c. 1745",
+      "origin": "French school",
+      "style": "Rococo",
+      "description": "Detailed surface extraction of Bouchardon's Cupid, showing a dense triangle field and marble-point cloud structure.",
+      "tags": [
+        "rococo",
+        "mythology",
+        "stl-style"
+      ],
+      "dataUrl": "./data/models/cupid_mesh.json",
+      "format": "tri_mesh",
+      "nodeCount": 61867,
+      "triangleCount": 28044,
+      "edgeCount": 84132,
+      "sourceTriangleCount": 253760,
+      "palette": {
+        "background": "#0e1518",
+        "surface": "#d9d0be",
+        "edge": "#89d4cb",
+        "node": "#f2bb8c"
+      }
+    },
+    {
+      "id": "pieta-wireframe",
+      "title": "Pieta Wireframe Study",
+      "artist": "Michelangelo",
+      "year": "1498-1499",
+      "origin": "Vatican Pieta",
+      "style": "High Renaissance",
+      "description": "Hybrid node-edge sculpture map with sampled faces, suitable for testing large graph overlays on top of triangle structure.",
+      "tags": [
+        "pieta",
+        "node graph",
+        "stl-style"
+      ],
+      "dataUrl": "./data/models/pieta_wireframe.json",
+      "format": "node_face",
+      "nodeCount": 15000,
+      "triangleCount": 18000,
+      "edgeCount": 50000,
+      "sourceTriangleCount": 815738,
+      "palette": {
+        "background": "#0d1218",
+        "surface": "#d5c8b2",
+        "edge": "#73b7d2",
+        "node": "#f0ad79"
+      }
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Monumental Mesh Atlas</title>
+    <meta
+      name="description"
+      content="A high-scale catalog for STL-style sculpture renderings with node and edge visualization tuned for massive meshes."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="kicker">Sculpture Visualization Platform</p>
+          <h1>Monumental Mesh Atlas</h1>
+          <p class="lead">
+            Professional catalog and viewer for dense node structures and triangle-heavy STL-style sculpture renderings.
+          </p>
+        </div>
+        <div class="topbar-stats">
+          <div>
+            <span>Total Works</span>
+            <strong id="statTotalWorks">0</strong>
+          </div>
+          <div>
+            <span>Total Nodes</span>
+            <strong id="statTotalNodes">0</strong>
+          </div>
+          <div>
+            <span>Total Triangles</span>
+            <strong id="statTotalTriangles">0</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="catalog-panel">
+          <section class="controls">
+            <label for="searchInput">Search</label>
+            <input id="searchInput" type="search" placeholder="Title, artist, era, tag" autocomplete="off" />
+
+            <div class="split-row">
+              <div>
+                <label for="styleFilter">Style</label>
+                <select id="styleFilter">
+                  <option value="all">All styles</option>
+                </select>
+              </div>
+              <div>
+                <label for="sortSelect">Sort</label>
+                <select id="sortSelect">
+                  <option value="nodes_desc">Most nodes</option>
+                  <option value="triangles_desc">Most triangles</option>
+                  <option value="title_asc">Title A-Z</option>
+                  <option value="artist_asc">Artist A-Z</option>
+                </select>
+              </div>
+            </div>
+
+            <p class="results" id="resultsCount">0 results</p>
+          </section>
+
+          <section id="catalogScroll" class="catalog-scroll" aria-label="Sculpture catalog">
+            <div id="catalogSpacer" class="catalog-spacer"></div>
+            <div id="catalogItems" class="catalog-items"></div>
+          </section>
+        </aside>
+
+        <section class="viewer-panel">
+          <div class="viewer-stage">
+            <canvas id="viewerCanvas" aria-label="3D sculpture viewer"></canvas>
+            <div id="viewerMessage" class="viewer-message">Choose a sculpture to begin.</div>
+            <div class="viewer-fade"></div>
+          </div>
+
+          <section class="viewer-controls">
+            <div class="control-group">
+              <label for="qualitySelect">Quality</label>
+              <select id="qualitySelect">
+                <option value="auto">Auto</option>
+                <option value="cinematic">Cinematic</option>
+                <option value="gallery">Gallery</option>
+                <option value="balanced">Balanced</option>
+                <option value="performance">Performance</option>
+              </select>
+            </div>
+
+            <div class="control-group">
+              <label for="nodeSize">Node size</label>
+              <input id="nodeSize" type="range" min="0.4" max="2.4" step="0.05" value="1.05" />
+            </div>
+
+            <div class="toggle-row">
+              <label><input id="toggleNodes" type="checkbox" checked /> Nodes</label>
+              <label><input id="toggleEdges" type="checkbox" checked /> Edges</label>
+              <label><input id="toggleSurface" type="checkbox" checked /> Surface</label>
+              <label><input id="toggleRotate" type="checkbox" checked /> Auto rotate</label>
+              <button id="recenterBtn" type="button">Recenter</button>
+            </div>
+          </section>
+
+          <section class="details" id="detailsPanel">
+            <p class="details-empty">No sculpture selected.</p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
