@@ -45,6 +45,13 @@
       <main class="layout">
         <aside class="catalog-panel">
           <section class="controls">
+            <label for="collectionSelect">Collection</label>
+            <select id="collectionSelect">
+              <option value="all">All collections</option>
+              <option value="local">Renderable local meshes</option>
+              <option value="historic">Historic 200 index</option>
+            </select>
+
             <label for="searchInput">Search</label>
             <input id="searchInput" type="search" placeholder="Title, artist, era, tag" autocomplete="off" />
 
@@ -58,6 +65,7 @@
               <div>
                 <label for="sortSelect">Sort</label>
                 <select id="sortSelect">
+                  <option value="popularity_desc">Popularity score</option>
                   <option value="nodes_desc">Most nodes</option>
                   <option value="triangles_desc">Most triangles</option>
                   <option value="title_asc">Title A-Z</option>

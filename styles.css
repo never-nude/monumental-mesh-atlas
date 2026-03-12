@@ -141,6 +141,10 @@ body {
   padding: 14px;
 }
 
+.controls > label:not(:first-child) {
+  margin-top: 10px;
+}
+
 label {
   display: block;
   margin-bottom: 6px;
@@ -174,6 +178,10 @@ input[type="range"]:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
   border-color: var(--accent);
+}
+
+:disabled {
+  cursor: not-allowed;
 }
 
 .split-row {
@@ -370,6 +378,10 @@ button:hover {
   background: #f8fbff;
 }
 
+.viewer-controls :disabled {
+  opacity: 0.55;
+}
+
 .details {
   padding: 14px;
   font-size: 13px;
@@ -387,6 +399,25 @@ button:hover {
   margin: 7px 0;
   color: var(--text-muted);
   line-height: 1.45;
+}
+
+.detail-link {
+  display: inline-flex;
+  align-items: center;
+  margin: 2px 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #bfd1e8;
+  background: #f4f8ff;
+  color: #144aa9;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.detail-link:hover {
+  border-color: #9ebae0;
+  background: #eaf2ff;
 }
 
 .details .stats-grid {

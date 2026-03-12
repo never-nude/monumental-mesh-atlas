@@ -2,6 +2,7 @@ import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
 import { OrbitControls } from "https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js";
 
 const CATALOG_URL = "./data/catalog.json";
+const HISTORIC_CATALOG_URL = "./data/popular-sculptures-renaissance-19c.json";
 const ROW_HEIGHT = 126;
 const OVERSCAN = 6;
 const NUMBER = new Intl.NumberFormat("en-US");
@@ -10,6 +11,7 @@ const dom = {
   statTotalWorks: getById("statTotalWorks"),
   statTotalNodes: getById("statTotalNodes"),
   statTotalTriangles: getById("statTotalTriangles"),
+  collectionSelect: getById("collectionSelect"),
   searchInput: getById("searchInput"),
   styleFilter: getById("styleFilter"),
   sortSelect: getById("sortSelect"),
@@ -34,6 +36,7 @@ const state = {
   filtered: [],
   byId: new Map(),
   activeId: null,
+  scope: "all",
   search: "",
   style: "all",
   sort: dom.sortSelect.value,
@@ -60,10 +63,10 @@ boot().catch((error) => {
 
 async function boot() {
   await viewer.init();
-  const manifest = await loadCatalog();
-
-  state.catalog = manifest.items || [];
+  const manifest = await loadCatalogs();
+  state.catalog = manifest.items;
   state.byId = new Map(state.catalog.map((item) => [item.id, item]));
+  hydrateCollectionFilter(manifest.collectionCounts);
 
   updateTopStats();
   hydrateStyleFilter();
@@ -75,6 +78,13 @@ async function boot() {
 }
 
 function bindEvents() {
+  dom.collectionSelect.addEventListener("change", () => {
+    state.scope = dom.collectionSelect.value;
+    hydrateStyleFilter();
+    updateTopStats();
+    applyFilters();
+  });
+
   dom.searchInput.addEventListener("input", () => {
     state.search = dom.searchInput.value.trim().toLowerCase();
     applyFilters();
@@ -138,27 +148,121 @@ function bindEvents() {
   });
 }
 
-async function loadCatalog() {
-  const response = await fetch(CATALOG_URL);
-  if (!response.ok) {
-    throw new Error(`Could not load ${CATALOG_URL} (${response.status})`);
-  }
+async function loadCatalogs() {
+  const [localManifest, historicManifest] = await Promise.all([
+    fetchJson(CATALOG_URL),
+    fetchJson(HISTORIC_CATALOG_URL)
+  ]);
 
+  const localItems = (localManifest.items || []).map((item) => normalizeLocalItem(item));
+  const historicItems = (historicManifest.items || []).map((item) => normalizeHistoricItem(item));
+
+  return {
+    items: [...localItems, ...historicItems],
+    collectionCounts: {
+      local: localItems.length,
+      historic: historicItems.length
+    }
+  };
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Could not load ${url} (${response.status})`);
+  }
   return response.json();
 }
 
-function updateTopStats() {
-  const totalNodes = state.catalog.reduce((sum, item) => sum + Number(item.nodeCount || 0), 0);
-  const totalTriangles = state.catalog.reduce((sum, item) => sum + Number(item.triangleCount || 0), 0);
+function normalizeLocalItem(item) {
+  return {
+    ...item,
+    id: `local-${item.id}`,
+    catalogType: "local",
+    renderable: true
+  };
+}
 
-  dom.statTotalWorks.textContent = NUMBER.format(state.catalog.length);
+function normalizeHistoricItem(item) {
+  return {
+    id: `historic-${item.uid}`,
+    title: item.title || "Untitled",
+    artist: item.estimatedArtist || item.creator || "Unknown artist",
+    year: inferCenturyLabel(item.estimatedPeriod),
+    origin: item.creator || "Sketchfab source",
+    style: item.estimatedPeriod || "Historic catalog",
+    description: item.description || "Historic sculpture listing with downloadable mesh archives.",
+    tags: item.tags || [],
+    dataUrl: null,
+    format: "external_reference",
+    nodeCount: Number(item.vertexCount || 0),
+    triangleCount: Number(item.faceCount || 0),
+    edgeCount: 0,
+    sourceTriangleCount: Number(item.faceCount || 0),
+    palette: {
+      background: "#0f1a24",
+      surface: "#d9d4c7",
+      edge: "#80b4d8",
+      node: "#f2be90"
+    },
+    catalogType: "historic",
+    renderable: false,
+    externalUrl: item.viewerUrl || null,
+    archiveTypes: item.archiveTypes || [],
+    license: item.license || null,
+    popularityScore: Number(item.popularityScore || 0)
+  };
+}
+
+function inferCenturyLabel(period) {
+  if (!period) {
+    return "";
+  }
+  const label = String(period).toLowerCase();
+  if (label.includes("renaissance")) {
+    return "15th-16th century";
+  }
+  if (label.includes("baroque")) {
+    return "17th century";
+  }
+  if (label.includes("18th")) {
+    return "18th century";
+  }
+  if (label.includes("19th") || label.includes("xix")) {
+    return "19th century";
+  }
+  if (label.includes("neoclassic")) {
+    return "18th-19th century";
+  }
+  return period;
+}
+
+function hydrateCollectionFilter(counts) {
+  const localCount = counts.local || 0;
+  const historicCount = counts.historic || 0;
+  const allCount = localCount + historicCount;
+  dom.collectionSelect.innerHTML = `
+    <option value="all">All collections (${NUMBER.format(allCount)})</option>
+    <option value="local">Renderable local meshes (${NUMBER.format(localCount)})</option>
+    <option value="historic">Historic 200 index (${NUMBER.format(historicCount)})</option>
+  `;
+  dom.collectionSelect.value = state.scope;
+}
+
+function updateTopStats() {
+  const scoped = getScopedCatalog();
+  const totalNodes = scoped.reduce((sum, item) => sum + Number(item.nodeCount || 0), 0);
+  const totalTriangles = scoped.reduce((sum, item) => sum + Number(item.triangleCount || 0), 0);
+
+  dom.statTotalWorks.textContent = NUMBER.format(scoped.length);
   dom.statTotalNodes.textContent = NUMBER.format(totalNodes);
   dom.statTotalTriangles.textContent = NUMBER.format(totalTriangles);
 }
 
 function hydrateStyleFilter() {
+  const scoped = getScopedCatalog();
   const uniqueStyles = new Set();
-  for (const item of state.catalog) {
+  for (const item of scoped) {
     if (item.style) {
       uniqueStyles.add(item.style);
     }
@@ -170,13 +274,18 @@ function hydrateStyleFilter() {
     .join("");
 
   dom.styleFilter.innerHTML = `<option value="all">All styles</option>${options}`;
+  if (state.style !== "all" && !uniqueStyles.has(state.style)) {
+    state.style = "all";
+  }
+  dom.styleFilter.value = state.style;
 }
 
 function applyFilters() {
   const query = state.search;
+  const scoped = getScopedCatalog();
 
-  const filtered = state.catalog.filter((item) => {
-    if (state.style !== "all" && item.style !== state.style) {
+  const filtered = scoped.filter((item) => {
+    if (state.style !== "all" && String(item.style || "") !== state.style) {
       return false;
     }
 
@@ -220,6 +329,9 @@ function sortItems(items, sortBy) {
     case "triangles_desc":
       items.sort((a, b) => Number(b.triangleCount || 0) - Number(a.triangleCount || 0));
       break;
+    case "popularity_desc":
+      items.sort((a, b) => Number(b.popularityScore || 0) - Number(a.popularityScore || 0));
+      break;
     case "artist_asc":
       items.sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
       break;
@@ -257,6 +369,9 @@ function renderCatalogWindow(resetScroll = false) {
 
 function catalogCardHtml(item) {
   const activeClass = item.id === state.activeId ? "active" : "";
+  const sourceBadge = item.renderable ? "Renderable" : "Historic index";
+  const triangleLabel = item.renderable ? "Triangles" : "Faces";
+  const metricLabel = item.renderable ? "Nodes" : "Vertices";
 
   return `
     <article class="catalog-card ${activeClass}" data-model-id="${escapeHtml(item.id)}" style="--accent:${
@@ -264,9 +379,12 @@ function catalogCardHtml(item) {
     }">
       <h3>${escapeHtml(item.title || "Untitled")}</h3>
       <p class="meta">${escapeHtml(item.artist || "Unknown artist")} ${item.year ? "• " + escapeHtml(item.year) : ""}</p>
-      <p class="meta">Nodes ${NUMBER.format(Number(item.nodeCount || 0))} • Triangles ${NUMBER.format(Number(item.triangleCount || 0))}</p>
+      <p class="meta">${metricLabel} ${NUMBER.format(Number(item.nodeCount || 0))} • ${triangleLabel} ${NUMBER.format(
+    Number(item.triangleCount || 0)
+  )}</p>
       <div class="pills">
         <span class="pill">${escapeHtml(item.style || "Unsorted")}</span>
+        <span class="pill">${escapeHtml(sourceBadge)}</span>
       </div>
     </article>
   `;
@@ -285,6 +403,14 @@ async function selectItem(id, options = {}) {
   state.activeId = id;
   renderCatalogWindow(Boolean(options.resetScroll));
   renderDetails(item, null);
+
+  const canRender = isRenderableItem(item);
+  setViewerControlsEnabled(canRender);
+  if (!canRender) {
+    viewer.showReferenceOnly(item);
+    renderDetails(item, null);
+    return;
+  }
 
   try {
     const stats = await viewer.load(item, state.quality);
@@ -311,24 +437,36 @@ function renderDetails(item, renderStats) {
     return;
   }
 
+  const canRender = isRenderableItem(item);
   const sourceTriangles = Number(item.sourceTriangleCount || item.triangleCount || 0);
-  const renderedTriangles = Number(renderStats?.renderedTriangles || item.triangleCount || 0);
-  const renderedNodes = Number(renderStats?.renderedNodes || item.nodeCount || 0);
-  const renderedEdges = Number(renderStats?.renderedEdgeSegments || item.edgeCount || 0);
+  const renderedTriangles = canRender ? Number(renderStats?.renderedTriangles || item.triangleCount || 0) : null;
+  const renderedNodes = canRender ? Number(renderStats?.renderedNodes || item.nodeCount || 0) : null;
+  const renderedEdges = canRender ? Number(renderStats?.renderedEdgeSegments || item.edgeCount || 0) : null;
   const profile = renderStats?.profileName || (state.quality === "auto" ? "auto" : state.quality);
+  const sourceLabel = canRender ? "Source Triangles" : "Source Faces";
+  const actionLink = item.externalUrl
+    ? `<p><a class="detail-link" href="${escapeHtml(item.externalUrl)}" target="_blank" rel="noopener noreferrer">Open source model</a></p>`
+    : "";
+  const archiveLabel = item.archiveTypes?.length ? item.archiveTypes.join(", ") : "n/a";
+  const modeLabel = canRender ? "Local Renderable Mesh" : "External Historic Listing";
+  const profileLabel = canRender ? profile : "reference";
 
   dom.detailsPanel.innerHTML = `
     <h2>${escapeHtml(item.title)}</h2>
     <p>${escapeHtml(item.artist || "Unknown artist")} ${item.year ? `(${escapeHtml(item.year)})` : ""}</p>
     <p>${escapeHtml(item.description || "No description available.")}</p>
+    ${actionLink}
     <div class="stats-grid">
-      <div><span>Rendered Triangles</span><strong>${NUMBER.format(renderedTriangles)}</strong></div>
-      <div><span>Source Triangles</span><strong>${NUMBER.format(sourceTriangles)}</strong></div>
-      <div><span>Rendered Nodes</span><strong>${NUMBER.format(renderedNodes)}</strong></div>
-      <div><span>Edge Segments</span><strong>${NUMBER.format(renderedEdges)}</strong></div>
-      <div><span>Profile</span><strong>${escapeHtml(profile)}</strong></div>
+      <div><span>Rendered Triangles</span><strong>${formatMetric(renderedTriangles)}</strong></div>
+      <div><span>${sourceLabel}</span><strong>${NUMBER.format(sourceTriangles)}</strong></div>
+      <div><span>Rendered Nodes</span><strong>${formatMetric(renderedNodes)}</strong></div>
+      <div><span>Edge Segments</span><strong>${formatMetric(renderedEdges)}</strong></div>
+      <div><span>Profile</span><strong>${escapeHtml(profileLabel)}</strong></div>
       <div><span>Style</span><strong>${escapeHtml(item.style || "Unknown")}</strong></div>
       <div><span>Origin</span><strong>${escapeHtml(item.origin || "Unknown")}</strong></div>
+      <div><span>Mode</span><strong>${escapeHtml(modeLabel)}</strong></div>
+      <div><span>Archives</span><strong>${escapeHtml(archiveLabel)}</strong></div>
+      <div><span>License</span><strong>${escapeHtml(item.license || "n/a")}</strong></div>
       <div><span>Tags</span><strong>${escapeHtml((item.tags || []).slice(0, 2).join(" / ") || "none")}</strong></div>
     </div>
   `;
@@ -469,6 +607,13 @@ class AtlasViewer {
       ...model.stats,
       profileName: model.profileName
     };
+  }
+
+  showReferenceOnly(item) {
+    this.disposeLayers();
+    const palette = item.palette || {};
+    this.scene.background = new THREE.Color(palette.background || "#0f1a24");
+    this.setMessage("Metadata entry only. Open the source model from details.");
   }
 
   applyModel(item, model) {
@@ -697,6 +842,37 @@ function getById(id) {
     throw new Error(`Missing expected DOM node: #${id}`);
   }
   return element;
+}
+
+function getScopedCatalog() {
+  if (state.scope === "all") {
+    return state.catalog;
+  }
+  return state.catalog.filter((item) => item.catalogType === state.scope);
+}
+
+function isRenderableItem(item) {
+  return Boolean(item && item.renderable && item.dataUrl);
+}
+
+function setViewerControlsEnabled(enabled) {
+  const controls = [
+    dom.qualitySelect,
+    dom.nodeSize,
+    dom.toggleNodes,
+    dom.toggleEdges,
+    dom.toggleSurface,
+    dom.toggleRotate,
+    dom.recenterBtn
+  ];
+
+  for (const control of controls) {
+    control.disabled = !enabled;
+  }
+}
+
+function formatMetric(value) {
+  return Number.isFinite(value) ? NUMBER.format(value) : "n/a";
 }
 
 function escapeHtml(value) {
