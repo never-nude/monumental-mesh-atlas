@@ -192,15 +192,22 @@ function normalizeLocalItem(item) {
 }
 
 function normalizeHistoricItem(item) {
+  const style = formatHistoricStyle(item.estimatedPeriod);
+  const creator = item.creator || null;
+  const inferredArtist = formatHistoricArtist(item.estimatedArtist);
+  const artist = inferredArtist || creator || "Unknown artist";
+
   return {
     id: `historic-${item.uid}`,
     title: item.title || "Untitled",
-    artist: item.estimatedArtist || item.creator || "Unknown artist",
+    artist,
+    creator,
     year: inferCenturyLabel(item.estimatedPeriod),
-    origin: item.creator || "Sketchfab source",
-    style: item.estimatedPeriod || "Historic catalog",
+    origin: creator ? `Sketchfab by ${creator}` : "Sketchfab source",
+    style: style || "Historic catalog",
     description: item.description || "Historic sculpture listing with downloadable mesh archives.",
     tags: item.tags || [],
+    matchedQueries: item.matchedQueries || [],
     dataUrl: null,
     format: "external_reference",
     nodeCount: Number(item.vertexCount || 0),
@@ -216,6 +223,9 @@ function normalizeHistoricItem(item) {
     catalogType: "historic",
     renderable: false,
     externalUrl: item.viewerUrl || null,
+    embedUrl: item.embedUrl || null,
+    thumbnailUrl: item.thumbnailUrl || null,
+    publishedAt: item.publishedAt || null,
     archiveTypes: item.archiveTypes || [],
     license: item.license || null,
     popularityScore: Number(item.popularityScore || 0)
@@ -397,19 +407,29 @@ function catalogCardHtml(item) {
   const sourceBadge = item.renderable ? "Renderable" : "Historic index";
   const triangleLabel = item.renderable ? "Triangles" : "Faces";
   const metricLabel = item.renderable ? "Nodes" : "Vertices";
+  const media = item.thumbnailUrl
+    ? `<img class="catalog-thumb" loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl)}" alt="${escapeHtml(
+        `${item.title || "Sculpture"} preview`
+      )}" />`
+    : `<div class="catalog-thumb-fallback" aria-hidden="true"></div>`;
 
   return `
     <article class="catalog-card ${activeClass}" data-model-id="${escapeHtml(item.id)}" style="--accent:${
       item.palette?.edge || "#9bc9c6"
     }">
-      <h3>${escapeHtml(item.title || "Untitled")}</h3>
-      <p class="meta">${escapeHtml(item.artist || "Unknown artist")} ${item.year ? "• " + escapeHtml(item.year) : ""}</p>
-      <p class="meta">${metricLabel} ${NUMBER.format(Number(item.nodeCount || 0))} • ${triangleLabel} ${NUMBER.format(
+      <div class="catalog-media">${media}</div>
+      <div class="catalog-copy">
+        <h3>${escapeHtml(item.title || "Untitled")}</h3>
+        <p class="meta">${escapeHtml(item.artist || "Unknown artist")} ${
+    item.year ? "• " + escapeHtml(item.year) : ""
+  }</p>
+        <p class="meta">${metricLabel} ${NUMBER.format(Number(item.nodeCount || 0))} • ${triangleLabel} ${NUMBER.format(
     Number(item.triangleCount || 0)
   )}</p>
-      <div class="pills">
-        <span class="pill">${escapeHtml(item.style || "Unsorted")}</span>
-        <span class="pill">${escapeHtml(sourceBadge)}</span>
+        <div class="pills">
+          <span class="pill">${escapeHtml(item.style || "Unsorted")}</span>
+          <span class="pill">${escapeHtml(sourceBadge)}</span>
+        </div>
       </div>
     </article>
   `;
@@ -478,8 +498,15 @@ function renderDetails(item, renderStats) {
   const archiveLabel = item.archiveTypes?.length ? item.archiveTypes.join(", ") : "n/a";
   const modeLabel = canRender ? "Local Renderable Mesh" : "External Historic Listing";
   const profileLabel = canRender ? profile : "reference";
+  const publishedLabel = item.publishedAt ? formatPublishedDate(item.publishedAt) : "n/a";
+  const preview = item.thumbnailUrl
+    ? `<figure class="details-preview"><img src="${escapeHtml(item.thumbnailUrl)}" alt="${escapeHtml(
+        `${item.title || "Sculpture"} preview`
+      )}" /></figure>`
+    : "";
 
   dom.detailsPanel.innerHTML = `
+    ${preview}
     <h2>${escapeHtml(item.title)}</h2>
     <p>${escapeHtml(item.artist || "Unknown artist")} ${item.year ? `(${escapeHtml(item.year)})` : ""}</p>
     <p>${escapeHtml(item.description || "No description available.")}</p>
@@ -493,6 +520,7 @@ function renderDetails(item, renderStats) {
       <div><span>Style</span><strong>${escapeHtml(item.style || "Unknown")}</strong></div>
       <div><span>Origin</span><strong>${escapeHtml(item.origin || "Unknown")}</strong></div>
       <div><span>Mode</span><strong>${escapeHtml(modeLabel)}</strong></div>
+      <div><span>Published</span><strong>${escapeHtml(publishedLabel)}</strong></div>
       <div><span>Archives</span><strong>${escapeHtml(archiveLabel)}</strong></div>
       <div><span>License</span><strong>${escapeHtml(item.license || "n/a")}</strong></div>
       <div><span>Tags</span><strong>${escapeHtml((item.tags || []).slice(0, 2).join(" / ") || "none")}</strong></div>
@@ -927,6 +955,67 @@ function setViewerControlsEnabled(enabled) {
 
 function formatMetric(value) {
   return Number.isFinite(value) ? NUMBER.format(value) : "n/a";
+}
+
+function formatPublishedDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "n/a";
+  }
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
+}
+
+function formatHistoricStyle(value) {
+  if (!value) {
+    return "";
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.includes("renaissance")) {
+    return "Renaissance";
+  }
+  if (normalized.includes("baroque")) {
+    return "Baroque";
+  }
+  if (normalized.includes("neoclassic")) {
+    return "Neoclassical";
+  }
+  if (normalized.includes("romantic")) {
+    return "Romantic";
+  }
+  if (normalized.includes("19th")) {
+    return "19th Century";
+  }
+  if (normalized.includes("18th")) {
+    return "18th Century";
+  }
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatHistoricArtist(value) {
+  if (!value) {
+    return "";
+  }
+
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((token) =>
+      token
+        .split("-")
+        .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : ""))
+        .join("-")
+    )
+    .join(" ");
 }
 
 function cssEscape(value) {

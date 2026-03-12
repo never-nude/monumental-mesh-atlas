@@ -49,6 +49,19 @@ Notes:
 - This step pulls ranked metadata and archive availability, not binary mesh files.
 - Authenticated download endpoints can be added in a follow-up step when a Sketchfab token is available.
 
+## Enrich historic catalog records (thumbnails + canonical URLs)
+
+```bash
+cd "/Users/michael/Documents/New project"
+node ./stl-catalog/scripts/enrich-historic-catalog.mjs --concurrency 5 --delayMs 120
+```
+
+This hydrates `popular-sculptures-renaissance-19c.json` entries from model detail endpoints and updates:
+
+- canonical `viewerUrl`
+- `thumbnailUrl` / dimensions
+- refreshed title, creator, counts, license, tags
+
 ## Add a new sculpture dataset
 
 1. Add a model JSON file using either format:
