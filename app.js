@@ -13,6 +13,7 @@ const dom = {
   statTotalTriangles: getById("statTotalTriangles"),
   collectionSelect: getById("collectionSelect"),
   searchInput: getById("searchInput"),
+  workSelect: getById("workSelect"),
   styleFilter: getById("styleFilter"),
   sortSelect: getById("sortSelect"),
   resultsCount: getById("resultsCount"),
@@ -88,6 +89,14 @@ function bindEvents() {
   dom.searchInput.addEventListener("input", onSearchChange);
   dom.searchInput.addEventListener("search", onSearchChange);
   dom.searchInput.addEventListener("change", onSearchChange);
+
+  dom.workSelect.addEventListener("change", () => {
+    const selectedId = dom.workSelect.value;
+    if (!selectedId) {
+      return;
+    }
+    void selectItem(selectedId, { resetScroll: false });
+  });
 
   dom.styleFilter.addEventListener("change", () => {
     state.style = dom.styleFilter.value;
@@ -323,6 +332,7 @@ function applyFilters() {
   }`;
 
   renderCatalogWindow(true);
+  populateWorkDropdown();
 
   if (state.activeId && state.activeId !== previousActiveId) {
     void selectItem(state.activeId, { resetScroll: false });
@@ -416,6 +426,9 @@ async function selectItem(id, options = {}) {
   }
 
   state.activeId = id;
+  if (dom.workSelect.querySelector(`option[value="${cssEscape(id)}"]`)) {
+    dom.workSelect.value = id;
+  }
   renderCatalogWindow(Boolean(options.resetScroll));
   renderDetails(item, null);
 
@@ -871,6 +884,27 @@ function getScopedCatalog() {
   return state.catalog.filter((item) => item.catalogType === state.scope);
 }
 
+function populateWorkDropdown() {
+  const options = state.filtered
+    .map((item) => {
+      const artist = item.artist ? ` — ${item.artist}` : "";
+      return `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || "Untitled")}${escapeHtml(artist)}</option>`;
+    })
+    .join("");
+
+  const label = state.filtered.length
+    ? `Jump to work (${NUMBER.format(state.filtered.length)})`
+    : "No matching works";
+
+  dom.workSelect.innerHTML = `<option value="">${escapeHtml(label)}</option>${options}`;
+  dom.workSelect.disabled = state.filtered.length === 0;
+  if (state.activeId && state.filtered.some((item) => item.id === state.activeId)) {
+    dom.workSelect.value = state.activeId;
+  } else {
+    dom.workSelect.value = "";
+  }
+}
+
 function isRenderableItem(item) {
   return Boolean(item && item.renderable && item.dataUrl);
 }
@@ -893,6 +927,13 @@ function setViewerControlsEnabled(enabled) {
 
 function formatMetric(value) {
   return Number.isFinite(value) ? NUMBER.format(value) : "n/a";
+}
+
+function cssEscape(value) {
+  if (window.CSS && typeof window.CSS.escape === "function") {
+    return window.CSS.escape(String(value));
+  }
+  return String(value).replace(/\"/g, "\\\"");
 }
 
 function escapeHtml(value) {
